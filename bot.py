@@ -78,18 +78,13 @@ horoscopes_en = [
     "The stars say you're too sexy to stay home all day. Go out and give the world a taste of your charm!"
 ]
 
-# Dictionary to store participants and their addresses
-participants = {}
-
 # Function to convert text to speech and save as an audio file
 def synthesize_speech(text, lang='uk', output_file="output.mp3"):
-    # Use gTTS to generate speech from text
     tts = gTTS(text, lang=lang)
     tts.save(output_file)
 
 # Function to handle /voice command that converts quoted message to audio
 async def handle_voice_command(update: Update, context: CallbackContext):
-    # Check if the command is used as a reply to a message
     if update.message.reply_to_message and update.message.reply_to_message.text:
         text_to_convert = update.message.reply_to_message.text
         print(f"Converting to audio: {text_to_convert}")
@@ -100,19 +95,16 @@ async def handle_voice_command(update: Update, context: CallbackContext):
 
 # Function to send a random joke
 async def send_joke(update: Update, context: CallbackContext):
-    # Choose a random joke from the list and send it
     joke = random.choice(jokes)
     await update.message.reply_text(joke)
 
 # Function to send a random quote
 async def send_quote(update: Update, context: CallbackContext):
-    # Choose a random quote from the list and send it
     quote = random.choice(quotes)
     await update.message.reply_text(quote)
 
 # Function to send a random horoscope
 async def send_horoscope(update: Update, context: CallbackContext):
-    # Randomly choose between Ukrainian and English horoscope
     if random.choice([True, False]):
         horoscope = random.choice(horoscopes_uk)
     else:
@@ -121,76 +113,18 @@ async def send_horoscope(update: Update, context: CallbackContext):
 
 # Function to provide help information
 async def send_help(update: Update, context: CallbackContext):
-    # Provide a list of available commands
     help_text = (
         "/joke - Get a random joke (either in Ukrainian or English).\n"
         "/quote - Receive a random inspirational quote.\n"
         "/horoscope - Get a cheeky and funny horoscope prediction.\n"
         "/voice - Convert a quoted message to an audio file. Use this command by replying to a message you want to convert.\n"
-        "/register <your address> - Register to participate in the 'Secret Friend' game with your delivery address.\n"
-        "/assign - Assign secret friends (only for you).\n"
         "/help - Show this help message."
     )
     await update.message.reply_text(help_text)
 
 async def get_user_id(update: Update, context: CallbackContext):
-    # Send the user their Telegram ID
     user_id = update.message.from_user.id
     await update.message.reply_text(f"Your Telegram ID is: {user_id}")
-
-# Command to register participants with their address in a private message
-async def register(update: Update, context: CallbackContext):
-    user = update.message.from_user
-
-    if user.id not in participants:
-        await update.message.reply_text("Please send your delivery address in a private message to me.")
-        return
-
-# Command to handle addresses sent in private messages
-async def handle_address(update: Update, context: CallbackContext):
-    user = update.message.from_user
-    address = update.message.text
-
-    if user.id in participants:
-        await update.message.reply_text("You have already registered with your address.")
-    else:
-        # Store the user's address in the participants dictionary
-        participants[user.id] = address
-        await update.message.reply_text(f"{user.first_name}, you have successfully registered with the address: {address}")
-
-# Command to assign secret friends
-async def assign_secret_friends(update: Update, context: CallbackContext):
-    # Define your user ID (replace with your actual Telegram ID)
-    MY_USER_ID = 391613184  # Replace with your actual Telegram ID
-    user_id = update.message.from_user.id
-
-    # Check if the user ID matches yours
-    if user_id != MY_USER_ID:
-        await update.message.reply_text("You do not have permission to use this command.")
-        return
-
-    # Check if there are enough participants to assign
-    if len(participants) < 2:
-        await update.message.reply_text("At least 2 participants are required to assign secret friends.")
-        return
-
-    user_ids = list(participants.keys())
-    random.shuffle(user_ids)  # Shuffle participants
-
-    assignments = {}
-    for i in range(len(user_ids)):
-        giver = user_ids[i]
-        receiver = user_ids[(i + 1) % len(user_ids)]  # Next participant
-        assignments[giver] = receiver
-
-    # Notify participants via DM with their secret friend's information
-    for giver in assignments:
-        receiver_id = assignments[giver]
-        receiver_address = participants[receiver_id]
-        context.bot.send_message(chat_id=giver, text=f"Your secret friend is: {receiver_id}. Delivery address: {receiver_address}.")
-
-    # Clear the participants list after assigning
-    participants.clear()
 
 # Main function to set up the bot
 def main():
@@ -203,9 +137,6 @@ def main():
     app.add_handler(CommandHandler("voice", handle_voice_command))
     app.add_handler(CommandHandler("help", send_help))
     app.add_handler(CommandHandler("myid", get_user_id))
-    app.add_handler(CommandHandler("register", register))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_address))
-    app.add_handler(CommandHandler("assign", assign_secret_friends))
     
     # Start the bot
     app.run_polling()

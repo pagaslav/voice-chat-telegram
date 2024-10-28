@@ -175,6 +175,14 @@ async def get_user_id(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     await update.message.reply_text(f"Your Telegram ID is: {user_id}")
 
+async def handle_voice_command(update: Update, context: CallbackContext):
+    if update.message.reply_to_message and update.message.reply_to_message.text:
+        text_to_convert = update.message.reply_to_message.text
+        synthesize_speech(text_to_convert, lang='uk')
+        await update.message.reply_voice(voice=open("output.mp3", "rb"))
+    else:
+        await update.message.reply_text("Please use this command as a reply to the message you want to convert to audio.")
+
 # Main function to set up the bot
 def main():
     app = Application.builder().token(API_TOKEN).build()

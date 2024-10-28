@@ -122,6 +122,10 @@ async def send_help(update: Update, context: CallbackContext):
     )
     await update.message.reply_text(help_text)
 
+async def get_user_id(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    await update.message.reply_text(f"Your Telegram ID is: {user_id}")
+
 # Main function to set up the bot
 def main():
     app = Application.builder().token(API_TOKEN).build()
@@ -132,6 +136,7 @@ def main():
     app.add_handler(CommandHandler("horoscope", send_horoscope))
     app.add_handler(CommandHandler("voice", handle_voice_command))
     app.add_handler(CommandHandler("help", send_help))
+    app.add_handler(CommandHandler("myid", get_user_id))
     
     # Start the bot
     app.run_polling()

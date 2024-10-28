@@ -84,11 +84,13 @@ horoscopes_en = [
 
 # Function to convert text to speech and save as an audio file
 def synthesize_speech(text, lang='uk', output_file="output.mp3"):
+    # Use gTTS to generate speech from text
     tts = gTTS(text, lang=lang)
     tts.save(output_file)
 
 # Function to handle /voice command that converts quoted message to audio
 async def handle_voice_command(update: Update, context: CallbackContext):
+    # Check if the command is used as a reply to a message
     if update.message.reply_to_message and update.message.reply_to_message.text:
         text_to_convert = update.message.reply_to_message.text
         print(f"Converting to audio: {text_to_convert}")
@@ -99,16 +101,19 @@ async def handle_voice_command(update: Update, context: CallbackContext):
 
 # Function to send a random joke
 async def send_joke(update: Update, context: CallbackContext):
+    # Choose a random joke from the list and send it
     joke = random.choice(jokes)
     await update.message.reply_text(joke)
 
 # Function to send a random quote
 async def send_quote(update: Update, context: CallbackContext):
+    # Choose a random quote from the list and send it
     quote = random.choice(quotes)
     await update.message.reply_text(quote)
 
 # Function to send a random horoscope
 async def send_horoscope(update: Update, context: CallbackContext):
+    # Randomly choose between Ukrainian and English horoscope
     if random.choice([True, False]):
         horoscope = random.choice(horoscopes_uk)
     else:
@@ -117,30 +122,64 @@ async def send_horoscope(update: Update, context: CallbackContext):
 
 # Function to provide help information
 async def send_help(update: Update, context: CallbackContext):
+    # Provide a list of available commands
     help_text = (
         "/joke - Get a random joke (either in Ukrainian or English).\n"
         "/quote - Receive a random inspirational quote.\n"
         "/horoscope - Get a cheeky and funny horoscope prediction.\n"
         "/voice - Convert a quoted message to an audio file. Use this command by replying to a message you want to convert.\n"
+        "/dialog - Read and voice all messages after the quoted message with sender names.\n"
         "/help - Show this help message."
     )
     await update.message.reply_text(help_text)
 
 async def get_user_id(update: Update, context: CallbackContext):
+    # Send the user their Telegram ID
     user_id = update.message.from_user.id
     await update.message.reply_text(f"Your Telegram ID is: {user_id}")
+
+# Function to handle the /dialog command
+async def handle_dialog_command(update: Update, context: CallbackContext):
+    # Check if the command is used as a reply to a message
+    if update.message.reply_to_message:
+        # Get the time of the replied message
+        replied_time = update.message.reply_to_message.date
+        chat_id = update.effective_chat.id
+        messages_to_read = []
+
+        # Fetch messages from the chat
+        async for message in context.bot.iter_messages(chat_id, offset_id=update.message.reply_to_message.message_id):
+            # Stop if the message is older than the replied message
+            if message.date < replied_time:
+                break
+            
+            # Format the message with the sender's name
+            sender_name = message.from_user.first_name if message.from_user.first_name else "Someone"
+            messages_to_read.append(f"{sender_name} said: {message.text}")
+
+        # Join the collected messages into a single string
+        dialog_text = "\n".join(messages_to_read)
+        if dialog_text:
+            # Synthesize speech from the collected messages
+            synthesize_speech(dialog_text)
+            await update.message.reply_voice(voice=open("output.mp3", "rb"))
+        else:
+            await update.message.reply_text("No messages found after the quoted message.")
+    else:
+        await update.message.reply_text("Please use this command as a reply to the message you want to start reading from.")
 
 # Main function to set up the bot
 def main():
     app = Application.builder().token(API_TOKEN).build()
     
-    # Add command handlers for jokes, quotes, horoscopes, voice conversion, and help
+    # Add command handlers for jokes, quotes, horoscopes, voice conversion, help, and dialog
     app.add_handler(CommandHandler("joke", send_joke))
     app.add_handler(CommandHandler("quote", send_quote))
     app.add_handler(CommandHandler("horoscope", send_horoscope))
     app.add_handler(CommandHandler("voice", handle_voice_command))
     app.add_handler(CommandHandler("help", send_help))
     app.add_handler(CommandHandler("myid", get_user_id))
+    app.add_handler(CommandHandler("dialog", handle_dialog_command))
     
     # Start the bot
     app.run_polling()

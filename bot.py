@@ -3,18 +3,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from gtts import gTTS
 import os
 import random
-import asyncio
-from datetime import datetime, timedelta
 
 # Load the API token from environment variable
 API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
-
-# Storage settings
-MAX_MESSAGES = 2000  # Maximum messages to store
-TIME_LIMIT = timedelta(hours=24)  # Message retention time
-
-# In-memory message storage
-stored_messages = []
 
 # List of jokes in Ukrainian and English
 jokes = [
@@ -29,6 +20,10 @@ jokes = [
     "Якщо ти відчуваєш себе непомітним, згадай, що є Wi-Fi мережі без пароля.",
     "Чому комп'ютер не любить каву? Бо він боїться перегрітися.",
     "Твоя посмішка яскрава, як екран смартфона на повній яскравості вночі.",
+    "Три патологоанатоми проводять розтин. Ріжуть шлунок - а там гречка. Перші два достають ложки і починають їсти. Третій дивився, допоки вони не доїли, а потім каже: «А ви що, не чули, що його отруїли?» Патологоанатоми тут же усе ж назад повернули. Тоді третій достає ложку і сам починає їсти. Вони до нього: «Шо ти робиш?!». А він: «та я набрехав, просто холодне їсти не люблю»",
+    "Життя дається лише один раз і тому дуже нерозумно витратити його на якусь скотину. Потрібно поділити його між двома-трьома.",
+    "Запитують чоловiка Iрини Бiлик. Як ти можеш терпіти свою дружину? Вона ж вічно бурчить, пилить, чіпляється до кожної дрібниці. Вона хоч колись буває у доброму гуморі? - Та не дай боже! Коли вона в доброму гуморі, вона ще й співає...",
+    "Перше побачення. Він: — Який я в неї? Вона: — Який він у нього?",
     
     # English jokes
     "I told my wife she should embrace her mistakes. She hugged me.",
@@ -87,56 +82,20 @@ horoscopes_en = [
     "The stars say you're too sexy to stay home all day. Go out and give the world a taste of your charm!"
 ]
 
-# Function to clean up old messages
-def clean_old_messages():
-    current_time = datetime.now()
-    global stored_messages
-    stored_messages = [
-        msg for msg in stored_messages
-        if current_time - msg['timestamp'] <= TIME_LIMIT
-    ]
-    if len(stored_messages) > MAX_MESSAGES:
-        stored_messages = stored_messages[-MAX_MESSAGES:]
-
-# Save each text message
-async def store_message(update: Update, context: CallbackContext):
-    if update.message.text:
-        stored_messages.append({
-            'text': update.message.text,
-            'sender_name': update.message.from_user.first_name,
-            'timestamp': datetime.now()
-        })
-        clean_old_messages()
-
-# Download saved messages as a text file
-async def download_messages(update: Update, context: CallbackContext):
-    with open("messages.txt", "w") as file:
-        for msg in stored_messages:
-            file.write(f"{msg['sender_name']} ({msg['timestamp']}): {msg['text']}\n")
-    await update.message.reply_document(document=open("messages.txt", "rb"))
-
-# Convert text to speech
+# Function to convert text to speech and save as an audio file
 def synthesize_speech(text, lang='uk', output_file="output.mp3"):
     tts = gTTS(text, lang=lang)
     tts.save(output_file)
 
-# Handle /dialog command to read messages after quoted message
-async def handle_dialog_command(update: Update, context: CallbackContext):
-    if update.message.reply_to_message:
-        replied_time = update.message.reply_to_message.date
-        messages_to_read = [
-            f"{msg['sender_name']} said: {msg['text']}"
-            for msg in stored_messages
-            if msg['timestamp'] > replied_time
-        ]
-        dialog_text = "\n".join(messages_to_read)
-        if dialog_text:
-            synthesize_speech(dialog_text)
-            await update.message.reply_voice(voice=open("output.mp3", "rb"))
-        else:
-            await update.message.reply_text("No messages found after the quoted message.")
+# Function to handle /voice command that converts quoted message to audio
+async def handle_voice_command(update: Update, context: CallbackContext):
+    if update.message.reply_to_message and update.message.reply_to_message.text:
+        text_to_convert = update.message.reply_to_message.text
+        print(f"Converting to audio: {text_to_convert}")
+        synthesize_speech(text_to_convert, lang='uk')
+        await update.message.reply_voice(voice=open("output.mp3", "rb"))
     else:
-        await update.message.reply_text("Please use this command as a reply to the message you want to start reading from.")
+        await update.message.reply_text("Please use this command as a reply to the message you want to convert to audio.")
 
 # Function to send a random joke
 async def send_joke(update: Update, context: CallbackContext):
@@ -163,41 +122,29 @@ async def send_help(update: Update, context: CallbackContext):
         "/quote - Receive a random inspirational quote.\n"
         "/horoscope - Get a cheeky and funny horoscope prediction.\n"
         "/voice - Convert a quoted message to an audio file. Use this command by replying to a message you want to convert.\n"
-        "/dialog - Read and voice all messages after the quoted message with sender names.\n"
-        "/download - Download saved text messages.\n"
         "/help - Show this help message."
     )
-    message = await update.message.reply_text(help_text)
-    await asyncio.sleep(10)
-    await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
+    await update.message.reply_text(help_text)
 
 async def get_user_id(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     await update.message.reply_text(f"Your Telegram ID is: {user_id}")
 
-async def handle_voice_command(update: Update, context: CallbackContext):
-    if update.message.reply_to_message and update.message.reply_to_message.text:
-        text_to_convert = update.message.reply_to_message.text
-        synthesize_speech(text_to_convert, lang='uk')
-        await update.message.reply_voice(voice=open("output.mp3", "rb"))
-    else:
-        await update.message.reply_text("Please use this command as a reply to the message you want to convert to audio.")
-
 # Main function to set up the bot
 def main():
     app = Application.builder().token(API_TOKEN).build()
-
-    app.add_handler(MessageHandler(filters.TEXT, store_message))
+    
+    # Add command handlers for jokes, quotes, horoscopes, voice conversion, and help
     app.add_handler(CommandHandler("joke", send_joke))
     app.add_handler(CommandHandler("quote", send_quote))
     app.add_handler(CommandHandler("horoscope", send_horoscope))
     app.add_handler(CommandHandler("voice", handle_voice_command))
     app.add_handler(CommandHandler("help", send_help))
     app.add_handler(CommandHandler("myid", get_user_id))
-    app.add_handler(CommandHandler("dialog", handle_dialog_command))
-    app.add_handler(CommandHandler("download", download_messages))
-
+    
+    # Start the bot
     app.run_polling()
 
+# Entry point of the script
 if __name__ == '__main__':
     main()

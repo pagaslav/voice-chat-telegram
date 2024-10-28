@@ -3,6 +3,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from gtts import gTTS
 import os
 import random
+import asyncio
 
 # Load the API token from environment variable
 API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
@@ -20,10 +21,6 @@ jokes = [
     "Якщо ти відчуваєш себе непомітним, згадай, що є Wi-Fi мережі без пароля.",
     "Чому комп'ютер не любить каву? Бо він боїться перегрітися.",
     "Твоя посмішка яскрава, як екран смартфона на повній яскравості вночі.",
-    "Три патологоанатоми проводять розтин. Ріжуть шлунок - а там гречка. Перші два достають ложки і починають їсти. Третій дивився, допоки вони не доїли, а потім каже: «А ви що, не чули, що його отруїли?» Патологоанатоми тут же усе ж назад повернули. Тоді третій достає ложку і сам починає їсти. Вони до нього: «Шо ти робиш?!». А він: «та я набрехав, просто холодне їсти не люблю»",
-    "Життя дається лише один раз і тому дуже нерозумно витратити його на якусь скотину. Потрібно поділити його між двома-трьома.",
-    "Запитують чоловiка Iрини Бiлик. Як ти можеш терпіти свою дружину? Вона ж вічно бурчить, пилить, чіпляється до кожної дрібниці. Вона хоч колись буває у доброму гуморі? - Та не дай боже! Коли вона в доброму гуморі, вона ще й співає...",
-    "Перше побачення. Він: — Який я в неї? Вона: — Який він у нього?",
     
     # English jokes
     "I told my wife she should embrace her mistakes. She hugged me.",
@@ -131,7 +128,11 @@ async def send_help(update: Update, context: CallbackContext):
         "/dialog - Read and voice all messages after the quoted message with sender names.\n"
         "/help - Show this help message."
     )
-    await update.message.reply_text(help_text)
+    message = await update.message.reply_text(help_text)
+
+    # Schedule message deletion after 10 seconds
+    await asyncio.sleep(10)
+    await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
 
 async def get_user_id(update: Update, context: CallbackContext):
     # Send the user their Telegram ID
@@ -153,9 +154,11 @@ async def handle_dialog_command(update: Update, context: CallbackContext):
             if message.date < replied_time:
                 break
             
-            # Format the message with the sender's name
-            sender_name = message.from_user.first_name if message.from_user.first_name else "Someone"
-            messages_to_read.append(f"{sender_name} said: {message.text}")
+            # Check if the message has text
+            if message.text:
+                # Format the message with the sender's name
+                sender_name = message.from_user.first_name if message.from_user.first_name else "Someone"
+                messages_to_read.append(f"{sender_name} said: {message.text}")
 
         # Join the collected messages into a single string
         dialog_text = "\n".join(messages_to_read)

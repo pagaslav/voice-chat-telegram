@@ -4,9 +4,17 @@ from gtts import gTTS
 import os
 import random
 import asyncio
+from datetime import datetime, timedelta
 
 # Load the API token from environment variable
 API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
+
+# Storage settings
+MAX_MESSAGES = 2000  # Maximum messages to store
+TIME_LIMIT = timedelta(hours=24)  # Message retention time
+
+# In-memory message storage
+stored_messages = []
 
 # List of jokes in Ukrainian and English
 jokes = [
@@ -79,38 +87,69 @@ horoscopes_en = [
     "The stars say you're too sexy to stay home all day. Go out and give the world a taste of your charm!"
 ]
 
-# Function to convert text to speech and save as an audio file
+# Function to clean up old messages
+def clean_old_messages():
+    current_time = datetime.now()
+    global stored_messages
+    stored_messages = [
+        msg for msg in stored_messages
+        if current_time - msg['timestamp'] <= TIME_LIMIT
+    ]
+    if len(stored_messages) > MAX_MESSAGES:
+        stored_messages = stored_messages[-MAX_MESSAGES:]
+
+# Save each text message
+async def store_message(update: Update, context: CallbackContext):
+    if update.message.text:
+        stored_messages.append({
+            'text': update.message.text,
+            'sender_name': update.message.from_user.first_name,
+            'timestamp': datetime.now()
+        })
+        clean_old_messages()
+
+# Download saved messages as a text file
+async def download_messages(update: Update, context: CallbackContext):
+    with open("messages.txt", "w") as file:
+        for msg in stored_messages:
+            file.write(f"{msg['sender_name']} ({msg['timestamp']}): {msg['text']}\n")
+    await update.message.reply_document(document=open("messages.txt", "rb"))
+
+# Convert text to speech
 def synthesize_speech(text, lang='uk', output_file="output.mp3"):
-    # Use gTTS to generate speech from text
     tts = gTTS(text, lang=lang)
     tts.save(output_file)
 
-# Function to handle /voice command that converts quoted message to audio
-async def handle_voice_command(update: Update, context: CallbackContext):
-    # Check if the command is used as a reply to a message
-    if update.message.reply_to_message and update.message.reply_to_message.text:
-        text_to_convert = update.message.reply_to_message.text
-        print(f"Converting to audio: {text_to_convert}")
-        synthesize_speech(text_to_convert, lang='uk')
-        await update.message.reply_voice(voice=open("output.mp3", "rb"))
+# Handle /dialog command to read messages after quoted message
+async def handle_dialog_command(update: Update, context: CallbackContext):
+    if update.message.reply_to_message:
+        replied_time = update.message.reply_to_message.date
+        messages_to_read = [
+            f"{msg['sender_name']} said: {msg['text']}"
+            for msg in stored_messages
+            if msg['timestamp'] > replied_time
+        ]
+        dialog_text = "\n".join(messages_to_read)
+        if dialog_text:
+            synthesize_speech(dialog_text)
+            await update.message.reply_voice(voice=open("output.mp3", "rb"))
+        else:
+            await update.message.reply_text("No messages found after the quoted message.")
     else:
-        await update.message.reply_text("Please use this command as a reply to the message you want to convert to audio.")
+        await update.message.reply_text("Please use this command as a reply to the message you want to start reading from.")
 
 # Function to send a random joke
 async def send_joke(update: Update, context: CallbackContext):
-    # Choose a random joke from the list and send it
     joke = random.choice(jokes)
     await update.message.reply_text(joke)
 
 # Function to send a random quote
 async def send_quote(update: Update, context: CallbackContext):
-    # Choose a random quote from the list and send it
     quote = random.choice(quotes)
     await update.message.reply_text(quote)
 
 # Function to send a random horoscope
 async def send_horoscope(update: Update, context: CallbackContext):
-    # Randomly choose between Ukrainian and English horoscope
     if random.choice([True, False]):
         horoscope = random.choice(horoscopes_uk)
     else:
@@ -119,65 +158,28 @@ async def send_horoscope(update: Update, context: CallbackContext):
 
 # Function to provide help information
 async def send_help(update: Update, context: CallbackContext):
-    # Provide a list of available commands
     help_text = (
         "/joke - Get a random joke (either in Ukrainian or English).\n"
         "/quote - Receive a random inspirational quote.\n"
         "/horoscope - Get a cheeky and funny horoscope prediction.\n"
         "/voice - Convert a quoted message to an audio file. Use this command by replying to a message you want to convert.\n"
         "/dialog - Read and voice all messages after the quoted message with sender names.\n"
+        "/download - Download saved text messages.\n"
         "/help - Show this help message."
     )
     message = await update.message.reply_text(help_text)
-
-    # Schedule message deletion after 10 seconds
     await asyncio.sleep(10)
     await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
 
 async def get_user_id(update: Update, context: CallbackContext):
-    # Send the user their Telegram ID
     user_id = update.message.from_user.id
     await update.message.reply_text(f"Your Telegram ID is: {user_id}")
-
-# Function to handle the /dialog command
-async def handle_dialog_command(update: Update, context: CallbackContext):
-    # Check if the command is used as a reply to a message
-    if update.message.reply_to_message:
-        # Get the time of the replied message
-        replied_time = update.message.reply_to_message.date
-        chat_id = update.effective_chat.id
-        messages_to_read = []
-
-        print(f"Fetching messages after {replied_time}")
-
-        # Fetch messages from the chat
-        async for message in context.bot.get_chat_history(chat_id, limit=100):  # Adjust the limit as needed
-            # Stop if the message is older than the replied message
-            if message.date < replied_time:
-                break
-            
-            # Check if the message has text
-            if message.text:
-                # Format the message with the sender's name
-                sender_name = message.from_user.first_name if message.from_user.first_name else "Someone"
-                messages_to_read.append(f"{sender_name} said: {message.text}")
-
-        # Join the collected messages into a single string
-        dialog_text = "\n".join(messages_to_read)
-        if dialog_text:
-            # Synthesize speech from the collected messages
-            synthesize_speech(dialog_text)
-            await update.message.reply_voice(voice=open("output.mp3", "rb"))
-        else:
-            await update.message.reply_text("No messages found after the quoted message.")
-    else:
-        await update.message.reply_text("Please use this command as a reply to the message you want to start reading from.")
 
 # Main function to set up the bot
 def main():
     app = Application.builder().token(API_TOKEN).build()
-    
-    # Add command handlers for jokes, quotes, horoscopes, voice conversion, help, and dialog
+
+    app.add_handler(MessageHandler(filters.TEXT, store_message))
     app.add_handler(CommandHandler("joke", send_joke))
     app.add_handler(CommandHandler("quote", send_quote))
     app.add_handler(CommandHandler("horoscope", send_horoscope))
@@ -185,10 +187,9 @@ def main():
     app.add_handler(CommandHandler("help", send_help))
     app.add_handler(CommandHandler("myid", get_user_id))
     app.add_handler(CommandHandler("dialog", handle_dialog_command))
-    
-    # Start the bot
+    app.add_handler(CommandHandler("download", download_messages))
+
     app.run_polling()
 
-# Entry point of the script
 if __name__ == '__main__':
     main()

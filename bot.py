@@ -148,8 +148,10 @@ async def handle_dialog_command(update: Update, context: CallbackContext):
         chat_id = update.effective_chat.id
         messages_to_read = []
 
+        print(f"Fetching messages after {replied_time}")
+
         # Fetch messages from the chat
-        async for message in context.bot.iter_messages(chat_id, offset_id=update.message.reply_to_message.message_id):
+        async for message in context.bot.get_chat_history(chat_id, limit=100):  # Adjust the limit as needed
             # Stop if the message is older than the replied message
             if message.date < replied_time:
                 break
